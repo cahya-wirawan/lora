@@ -350,7 +350,7 @@ def main():
 
     accelerator.wait_for_everyone()
     model.push_to_hub(
-        "smangrul/"
+        "cahya/"
         + f"{dataset_name}_{model_name_or_path}_{peft_config.peft_type}_{peft_config.task_type}".replace("/", "_"),
         state_dict=accelerator.get_state_dict(model),
         use_auth_token=True,

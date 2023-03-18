@@ -20,39 +20,6 @@ from transformers import (
 
 from peft import LoraConfig, TaskType, get_peft_model
 
-
-def levenshtein_distance(str1, str2):
-    # TC: O(N^2)
-    # SC: O(N^2)
-    if str1 == str2:
-        return 0
-    num_rows = len(str1) + 1
-    num_cols = len(str2) + 1
-    dp_matrix = np.empty((num_rows, num_cols))
-    dp_matrix[0, :] = range(num_cols)
-    dp_matrix[:, 0] = range(num_rows)
-
-    for i in range(1, num_rows):
-        for j in range(1, num_cols):
-            if str1[i - 1] == str2[j - 1]:
-                dp_matrix[i, j] = dp_matrix[i - 1, j - 1]
-            else:
-                dp_matrix[i, j] = min(dp_matrix[i - 1, j - 1], dp_matrix[i - 1, j], dp_matrix[i, j - 1]) + 1
-
-    return dp_matrix[num_rows - 1, num_cols - 1]
-
-
-def get_closest_label(eval_pred, classes):
-    min_id = sys.maxsize
-    min_edit_distance = sys.maxsize
-    for i, class_label in enumerate(classes):
-        edit_distance = levenshtein_distance(eval_pred.strip(), class_label)
-        if edit_distance < min_edit_distance:
-            min_id = i
-            min_edit_distance = edit_distance
-    return classes[min_id]
-
-
 # Converting Bytes to Megabytes
 def b2mb(x):
     return int(x / 2**20)
@@ -318,39 +285,9 @@ def main():
         accelerator.print(f"{eval_preds[:10]=}")
         accelerator.print(f"{dataset['train'][label_column][:10]=}")
 
-    if do_test:
-        model.eval()
-        test_preds = []
-        for _, batch in enumerate(tqdm(test_dataloader)):
-            batch = {k: v for k, v in batch.items() if k != "labels"}
-            with torch.no_grad():
-                outputs = accelerator.unwrap_model(model).generate(
-                    **batch, synced_gpus=is_ds_zero_3, max_new_tokens=10
-                )  # synced_gpus=True for DS-stage 3
-            outputs = accelerator.pad_across_processes(outputs, dim=1, pad_index=tokenizer.pad_token_id)
-            preds = accelerator.gather(outputs)
-            preds = preds[:, max_length:].detach().cpu().numpy()
-            test_preds.extend(tokenizer.batch_decode(preds, skip_special_tokens=True))
-
-        test_preds_cleaned = []
-        for _, pred in enumerate(test_preds):
-            test_preds_cleaned.append(get_closest_label(pred, classes))
-
-        test_df = dataset["test"].to_pandas()
-        assert len(test_preds_cleaned) == len(test_df), f"{len(test_preds_cleaned)} != {len(test_df)}"
-        test_df[label_column] = test_preds_cleaned
-        test_df["text_labels_orig"] = test_preds
-        accelerator.print(test_df[[text_column, label_column]].sample(20))
-
-        pred_df = test_df[["ID", label_column]]
-        pred_df.columns = ["ID", "Label"]
-
-        os.makedirs(f"data/{dataset_name}", exist_ok=True)
-        pred_df.to_csv(f"data/{dataset_name}/predictions.csv", index=False)
-
     accelerator.wait_for_everyone()
     model.push_to_hub(
-        "smangrul/"
+        "cahya/"
         + f"{dataset_name}_{model_name_or_path}_{peft_config.peft_type}_{peft_config.task_type}".replace("/", "_"),
         state_dict=accelerator.get_state_dict(model),
         use_auth_token=True,
