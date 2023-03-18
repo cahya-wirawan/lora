@@ -75,7 +75,7 @@ class TorchTracemalloc:
 
 def main():
     accelerator = Accelerator()
-    model_name_or_path = "bigscience/bloomz-7b1"
+    model_name_or_path = "bigscience/bloomz-560m"
     dataset_name = "twitter_complaints"
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
     text_column = "Tweet text"
