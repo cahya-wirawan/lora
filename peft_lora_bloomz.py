@@ -155,7 +155,7 @@ def main():
     )
 
     # creating model
-    model = AutoModelForCausalLM.from_pretrained(model_name_or_path)
+    model = AutoModelForCausalLM.from_pretrained(model_name_or_path, load_in_8bit=True, device_map="auto")
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
@@ -190,15 +190,8 @@ def main():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-        # accelerator.save_state(checkpoint_dir)
 
-        accelerator.wait_for_everyone()
-        model.push_to_hub(
-            "cahya/bloomz-7b1-mt-instruct",
-            state_dict=accelerator.get_state_dict(model),
-            use_auth_token=True,
-        )
-        accelerator.wait_for_everyone()
+        accelerator.save_state(checkpoint_dir)
 
         # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
         accelerator.print("GPU Memory before entering the train : {}".format(b2mb(tracemalloc.begin)))
@@ -256,12 +249,12 @@ def main():
         )
 
     accelerator.wait_for_everyone()
-    model.push_to_hub(
-        "cahya/bloomz-7b1-mt-instruct",
-        state_dict=accelerator.get_state_dict(model),
-        use_auth_token=True,
+    unwrapped_model = accelerator.unwrap_model(model)
+    unwrapped_model.save_pretrained(
+        checkpoint_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
     )
-    accelerator.wait_for_everyone()
+    if accelerator.is_main_process:
+        tokenizer.save_pretrained(checkpoint_dir)
 
 
 if __name__ == "__main__":
