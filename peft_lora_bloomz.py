@@ -1,11 +1,8 @@
 import gc
-import os
-import sys
 import threading
 import random
 from itertools import chain
 
-import numpy as np
 import psutil
 import torch
 from accelerate import Accelerator
@@ -78,8 +75,8 @@ class TorchTracemalloc:
 
 def main():
     accelerator = Accelerator()
-    model_name_or_path = "bigscience/bloomz-560m"
-    dataset_name = "twitter_complaints"
+    model_name_or_path = "bigscience/bloomz-7b1-mt"
+    dataset_name = "cahya/instructions-all"
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
     text_column = "text"
     lr = 5e-5
@@ -95,7 +92,7 @@ def main():
     checkpoint_dir = "checkpoint"
 
     logger = get_logger(__name__)
-    dataset = load_dataset("cahya/instructions-all", dataset_name)
+    dataset = load_dataset(dataset_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
     block_size = tokenizer.model_max_length
@@ -193,7 +190,16 @@ def main():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-        accelerator.save_state(checkpoint_dir)
+        # accelerator.save_state(checkpoint_dir)
+
+        accelerator.wait_for_everyone()
+        model.push_to_hub(
+            "cahya/bloomz-7b1-mt-instruct",
+            state_dict=accelerator.get_state_dict(model),
+            use_auth_token=True,
+        )
+        accelerator.wait_for_everyone()
+
         # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
         accelerator.print("GPU Memory before entering the train : {}".format(b2mb(tracemalloc.begin)))
         accelerator.print("GPU Memory consumed at the end of the train (end-begin): {}".format(tracemalloc.used))
@@ -251,8 +257,7 @@ def main():
 
     accelerator.wait_for_everyone()
     model.push_to_hub(
-        "cahya/"
-        + f"{dataset_name}_{model_name_or_path}_{peft_config.peft_type}_{peft_config.task_type}".replace("/", "_"),
+        "cahya/bloomz-7b1-mt-instruct",
         state_dict=accelerator.get_state_dict(model),
         use_auth_token=True,
     )
