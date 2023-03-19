@@ -156,8 +156,6 @@ def main():
         eval_dataset, collate_fn=default_data_collator, batch_size=per_device_eval_batch_size
     )
 
-    print(next(iter(train_dataloader)))
-
     # creating model
     model = AutoModelForCausalLM.from_pretrained(model_name_or_path)
     model = get_peft_model(model, peft_config)
