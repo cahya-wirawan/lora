@@ -2,11 +2,14 @@ import gc
 import os
 import sys
 import threading
+import random
+from itertools import chain
 
 import numpy as np
 import psutil
 import torch
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -78,104 +81,79 @@ def main():
     model_name_or_path = "bigscience/bloomz-560m"
     dataset_name = "twitter_complaints"
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
-    text_column = "Tweet text"
-    label_column = "text_label"
-    lr = 3e-3
-    num_epochs = 20
+    text_column = "text"
+    lr = 5e-5
+    num_epochs = 5
     batch_size = 4
     seed = 42
     max_length = 64
-    do_test = False
     set_seed(seed)
+    preprocessing_num_workers=4
+    overwrite_cache = False
+    per_device_train_batch_size = 1
+    per_device_eval_batch_size = 1
+    checkpoint_dir = "checkpoint"
 
-    dataset = load_dataset("ought/raft", dataset_name)
-    classes = [k.replace("_", " ") for k in dataset["train"].features["Label"].names]
-    dataset = dataset.map(
-        lambda x: {"text_label": [classes[label] for label in x["Label"]]},
-        batched=True,
-        num_proc=1,
-    )
-
+    logger = get_logger(__name__)
+    dataset = load_dataset("cahya/instructions-all", dataset_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
-    def preprocess_function(examples):
-        batch_size = len(examples[text_column])
-        inputs = [f"{text_column} : {x} Label : " for x in examples[text_column]]
-        targets = [str(x) for x in examples[label_column]]
-        model_inputs = tokenizer(inputs)
-        labels = tokenizer(targets)
-        for i in range(batch_size):
-            sample_input_ids = model_inputs["input_ids"][i]
-            label_input_ids = labels["input_ids"][i] + [tokenizer.pad_token_id]
-            model_inputs["input_ids"][i] = sample_input_ids + label_input_ids
-            labels["input_ids"][i] = [-100] * len(sample_input_ids) + label_input_ids
-            model_inputs["attention_mask"][i] = [1] * len(model_inputs["input_ids"][i])
-        for i in range(batch_size):
-            sample_input_ids = model_inputs["input_ids"][i]
-            label_input_ids = labels["input_ids"][i]
-            model_inputs["input_ids"][i] = [tokenizer.pad_token_id] * (
-                max_length - len(sample_input_ids)
-            ) + sample_input_ids
-            model_inputs["attention_mask"][i] = [0] * (max_length - len(sample_input_ids)) + model_inputs[
-                "attention_mask"
-            ][i]
-            labels["input_ids"][i] = [-100] * (max_length - len(sample_input_ids)) + label_input_ids
-            model_inputs["input_ids"][i] = torch.tensor(model_inputs["input_ids"][i][:max_length])
-            model_inputs["attention_mask"][i] = torch.tensor(model_inputs["attention_mask"][i][:max_length])
-            labels["input_ids"][i] = torch.tensor(labels["input_ids"][i][:max_length])
-        model_inputs["labels"] = labels["input_ids"]
-        return model_inputs
+    block_size = tokenizer.model_max_length
+    if block_size > 1024:
+        block_size = 1024
+    def tokenize_function(examples):
+        return tokenizer(examples[text_column])
 
-    def test_preprocess_function(examples):
-        batch_size = len(examples[text_column])
-        inputs = [f"{text_column} : {x} Label : " for x in examples[text_column]]
-        model_inputs = tokenizer(inputs)
-        # print(model_inputs)
-        for i in range(batch_size):
-            sample_input_ids = model_inputs["input_ids"][i]
-            model_inputs["input_ids"][i] = [tokenizer.pad_token_id] * (
-                max_length - len(sample_input_ids)
-            ) + sample_input_ids
-            model_inputs["attention_mask"][i] = [0] * (max_length - len(sample_input_ids)) + model_inputs[
-                "attention_mask"
-            ][i]
-            model_inputs["input_ids"][i] = torch.tensor(model_inputs["input_ids"][i][:max_length])
-            model_inputs["attention_mask"][i] = torch.tensor(model_inputs["attention_mask"][i][:max_length])
-        return model_inputs
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
+    def group_texts(examples):
+        # Concatenate all texts.
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
+        # customize this part to your needs.
+        if total_length >= block_size:
+            total_length = (total_length // block_size) * block_size
+        # Split by chunks of max_len.
+        result = {
+            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+            for k, t in concatenated_examples.items()
+        }
+        result["labels"] = result["input_ids"].copy()
+        return result
 
     with accelerator.main_process_first():
-        processed_datasets = dataset.map(
-            preprocess_function,
+        tokenized_datasets = dataset.map(
+            tokenize_function,
             batched=True,
-            num_proc=1,
-            remove_columns=dataset["train"].column_names,
-            load_from_cache_file=True,
+            num_proc=preprocessing_num_workers,
+            # remove_columns=column_names,
+            load_from_cache_file=not overwrite_cache,
             desc="Running tokenizer on dataset",
         )
     accelerator.wait_for_everyone()
 
-    train_dataset = processed_datasets["train"]
-
     with accelerator.main_process_first():
-        processed_datasets = dataset.map(
-            test_preprocess_function,
+        lm_datasets = tokenized_datasets.map(
+            group_texts,
             batched=True,
-            num_proc=1,
-            remove_columns=dataset["train"].column_names,
-            load_from_cache_file=False,
-            desc="Running tokenizer on dataset",
+            num_proc=preprocessing_num_workers,
+            load_from_cache_file=not overwrite_cache,
+            desc=f"Grouping texts in chunks of {block_size}",
         )
-    eval_dataset = processed_datasets["train"]
-    test_dataset = processed_datasets["test"]
 
+    train_dataset = lm_datasets["train"]
+    eval_dataset = lm_datasets["validation"]
+
+    # Log a few random samples from the training set:
+    for index in random.sample(range(len(train_dataset)), 3):
+        logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+
+    # DataLoaders creation:
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True
+        train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=per_device_train_batch_size
     )
     eval_dataloader = DataLoader(
-        eval_dataset, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True
-    )
-    test_dataloader = DataLoader(
-        test_dataset, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True
+        eval_dataset, collate_fn=default_data_collator, batch_size=per_device_eval_batch_size
     )
 
     print(next(iter(train_dataloader)))
@@ -195,8 +173,8 @@ def main():
         num_training_steps=(len(train_dataloader) * num_epochs),
     )
 
-    model, train_dataloader, eval_dataloader, test_dataloader, optimizer, lr_scheduler = accelerator.prepare(
-        model, train_dataloader, eval_dataloader, test_dataloader, optimizer, lr_scheduler
+    model, train_dataloader, eval_dataloader, optimizer, lr_scheduler = accelerator.prepare(
+        model, train_dataloader, eval_dataloader, optimizer, lr_scheduler
     )
     accelerator.print(model)
 
@@ -216,6 +194,7 @@ def main():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+        accelerator.save_state(checkpoint_dir)
         # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
         accelerator.print("GPU Memory before entering the train : {}".format(b2mb(tracemalloc.begin)))
         accelerator.print("GPU Memory consumed at the end of the train (end-begin): {}".format(tracemalloc.used))
@@ -270,20 +249,6 @@ def main():
                 tracemalloc.cpu_peaked + b2mb(tracemalloc.cpu_begin)
             )
         )
-
-        correct = 0
-        total = 0
-        assert len(eval_preds) == len(
-            dataset["train"][label_column]
-        ), f"{len(eval_preds)} != {len(dataset['train'][label_column])}"
-        for pred, true in zip(eval_preds, dataset["train"][label_column]):
-            if pred.strip() == true.strip():
-                correct += 1
-            total += 1
-        accuracy = correct / total * 100
-        accelerator.print(f"{accuracy=}")
-        accelerator.print(f"{eval_preds[:10]=}")
-        accelerator.print(f"{dataset['train'][label_column][:10]=}")
 
     accelerator.wait_for_everyone()
     model.push_to_hub(
