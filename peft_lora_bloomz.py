@@ -121,12 +121,13 @@ def main():
         result["labels"] = result["input_ids"].copy()
         return result
 
+    column_names = dataset["train"].column_names
     with accelerator.main_process_first():
         tokenized_datasets = dataset.map(
             tokenize_function,
             batched=True,
             num_proc=preprocessing_num_workers,
-            # remove_columns=column_names,
+            remove_columns=column_names,
             load_from_cache_file=not overwrite_cache,
             desc="Running tokenizer on dataset",
         )
