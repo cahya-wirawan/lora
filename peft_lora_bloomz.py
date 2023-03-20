@@ -171,7 +171,7 @@ def main():
     )
 
     # creating model
-    model = AutoModelForCausalLM.from_pretrained(model_name_or_path, load_in_8bit=True, device_map="auto")
+    model = AutoModelForCausalLM.from_pretrained(model_name_or_path, load_in_8bit=False, device_map="auto")
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
@@ -272,7 +272,7 @@ def main():
         tokenizer.save_pretrained(lora_dir)
         if repo:
             repo.push_to_hub(
-                commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                commit_message=f"End of training at epoch {epoch}", blocking=False, auto_lfs_prune=True
             )
 
 

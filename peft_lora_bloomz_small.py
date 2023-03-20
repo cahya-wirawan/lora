@@ -275,7 +275,7 @@ def main():
         tokenizer.save_pretrained(lora_dir)
         if repo:
             repo.push_to_hub(
-                commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                commit_message=f"End of training at epoch {epoch}", blocking=False, auto_lfs_prune=True
             )
 
 
