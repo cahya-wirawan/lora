@@ -77,13 +77,13 @@ class TorchTracemalloc:
 
 def main():
     accelerator = Accelerator()
-    model_name_or_path = "bigscience/bloomz-7b1-mt"
-    dataset_name = "cahya/instructions-all"
-    repo_name = "cahya/bloomz-7b1-mt"
+    model_name_or_path = "bigscience/bloomz-560m"
+    dataset_name = "cahya/instructions-de"
+    repo_name = "cahya/bloomz-560m-lora"
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
     text_column = "text"
     lr = 5e-5
-    num_epochs = 3
+    num_epochs = 2
     seed = 42
     max_length = 64
     set_seed(seed)
@@ -96,6 +96,9 @@ def main():
 
     logger = get_logger(__name__)
     dataset = load_dataset(dataset_name)
+    dataset["train"] = dataset["train"].select(range(500))
+    dataset["validation"] = dataset["validation"].select(range(100))
+    dataset["test"] = dataset["test"].select(range(100))
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
     block_size = tokenizer.model_max_length
