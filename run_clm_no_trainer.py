@@ -229,8 +229,8 @@ def parse_args():
     args = parser.parse_args()
 
     # Sanity checks
-    if args.dataset_name is None and args.train_file is None and args.validation_file is None:
-        raise ValueError("Need either a dataset name or a training/validation file.")
+    if args.instruction_languages is None and args.dataset_name is None and args.train_file is None and args.validation_file is None:
+        raise ValueError("Need either a instruction_languages or a dataset name or a training/validation file.")
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
@@ -309,9 +309,9 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
-    if args.intruction_languages is not None:
+    if args.instruction_languages is not None:
         raw_datasets = None
-        languages = args.intruction_languages.split(",")
+        languages = args.instruction_languages.split(",")
         for i, lang in enumerate(languages):
             lang = lang.strip()
             ds_name = f"cahya/instructions-{lang}"
