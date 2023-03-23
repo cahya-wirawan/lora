@@ -70,6 +70,12 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a causal language modeling task")
     parser.add_argument(
+        "--instruction_languages",
+        type=str,
+        default=None,
+        help="The list of instruction datasets.",
+    )
+    parser.add_argument(
         "--dataset_name",
         type=str,
         default=None,
