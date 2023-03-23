@@ -36,7 +36,7 @@ import torch
 from accelerate import Accelerator, DistributedType
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from datasets import load_dataset
+from datasets import load_dataset, concatenate_datasets
 from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
@@ -303,7 +303,23 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
-    if args.dataset_name is not None:
+    if args.intruction_languages is not None:
+        raw_datasets = None
+        languages = args.intruction_languages.split(",")
+        for i, lang in enumerate(languages):
+            lang = lang.strip()
+            ds_name = f"cahya/instructions-{lang}"
+            ds = load_dataset(ds_name)
+            ds = ds.remove_columns(["id"])
+            print(f"{lang}: {len(ds['train'])}, {len(ds['validation'])}, {len(ds['test'])}")
+            if i == 0:
+                raw_datasets = ds
+            else:
+                for split in ["train", "validation", "test"]:
+                    raw_datasets[split] = concatenate_datasets([raw_datasets[split], ds[split]])
+        print(f"Dataset all: {len(raw_datasets['train'])}, {len(raw_datasets['validation'])}, {len(raw_datasets['test'])}")
+        raw_datasets = raw_datasets.shuffle(seed=42)
+    elif args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
         if "validation" not in raw_datasets.keys():
