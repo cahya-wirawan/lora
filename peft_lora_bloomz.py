@@ -81,8 +81,8 @@ def main():
     dataset_name = "cahya/instructions-all"
     repo_name = "cahya/bloomz-7b1-mt"
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
-    text_column = "text"
-    lr = 5e-6
+    # text_column = "text"
+    lr = 5e-5
     num_epochs = 1
     seed = 42
     max_length = 64
@@ -229,7 +229,7 @@ def main():
         )
         train_epoch_loss = total_loss / len(eval_dataloader)
         train_ppl = torch.exp(train_epoch_loss)
-        accelerator.print(f"{epoch=}: {train_ppl=} {train_epoch_loss=}")
+        accelerator.print(f"epoch={epoch}: train_ppl={train_ppl} train_epoch_loss={train_epoch_loss}")
 
         model.eval()
         eval_preds = []
