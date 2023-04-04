@@ -4,12 +4,14 @@ import random
 from itertools import chain
 import os
 from pathlib import Path
-
+import yaml
+from argparse import ArgumentParser
+import json
 import psutil
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from datasets import load_dataset
+from datasets import load_dataset, concatenate_datasets
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import (
@@ -80,47 +82,65 @@ class TorchTracemalloc:
 
 
 def main():
+    logger = get_logger(__name__)
+    # 1. Get config path
+    parser = ArgumentParser()
+    parser.add_argument("--config", "-c", type=str, required=True)
+    parser.add_argument("--local_rank", type=int, default=0)
+    args = parser.parse_args()
+    config_path = args.config
+
+    # 2. Load config and set seed
+    with open(config_path, "r") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        logger.info(json.dumps(config, indent=2))
+        set_seed(config["training"]["seed"])
     accelerator = Accelerator()
-    model_name_or_path = Path.home()/"Work/models/llama-7b-hf"
-    dataset_name = "cahya/instructions-id"
-    repo_name = "cahya/llama-7b-lora-id"
-    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
-    text_column = "text"
-    lr = 5e-5
-    num_epochs = 1
-    seed = 42
+    model_name_or_path = config["model_and_tokenizer"]["pretrained_model_name"].replace("$HOME", Path.home())
+    dataset_names = config["dataset"]["name"]
+    text_column = config["dataset"]["key"]
+    lr = config["training"]["learning_rate"]
+    num_epochs = config["training"]["epochs"]
+    seed = config["training"]["seed"]
+    per_device_train_batch_size = config["training"]["train_batch_size"]
+    per_device_eval_batch_size = config["training"]["eval_batch_size"]
+    output_dir = config["training"]["project"]
+    checkpoint_dir = "checkpoint"
     max_length = 64
     set_seed(seed)
-    preprocessing_num_workers = 4
+    preprocessing_num_workers = 8
     overwrite_cache = False
-    per_device_train_batch_size = 1
-    per_device_eval_batch_size = 1
-    checkpoint_dir = "checkpoint"
-    lora_dir = repo_name
 
-    logger = get_logger(__name__)
-    dataset = load_dataset(dataset_name)
+    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
+
+    if True:
+        raw_datasets = None
+        dataset_names = dataset_names.split(",")
+        for i, dataset_name in enumerate(dataset_names):
+            dataset_name = dataset_name.strip()
+            ds = load_dataset(dataset_name)
+            ds = ds.select_columns([text_column])
+            print(f"{dataset_name}: {len(ds['train'])}, {len(ds['validation'])}, {len(ds['test'])}")
+            if i == 0:
+                raw_datasets = ds
+            else:
+                for split in ["train", "validation", "test"]:
+                    raw_datasets[split] = concatenate_datasets([raw_datasets[split], ds[split]])
+        print(
+            f"Dataset all: {len(raw_datasets['train'])}, {len(raw_datasets['validation'])}, {len(raw_datasets['test'])}")
+        raw_datasets = raw_datasets.shuffle(seed=42)
+
+    dataset = raw_datasets
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
     block_size = tokenizer.model_max_length
     if block_size > 1024:
         block_size = 1024
 
-    # Handle the repository creation
-    repo = None
-    if accelerator.is_main_process:
-        # create_repo(repo_name)
-        # repo = Repository(lora_dir, clone_from=repo_name)
-
-        with open(os.path.join(lora_dir, ".gitignore"), "w+") as gitignore:
-            if "step_*" not in gitignore:
-                gitignore.write("step_*\n")
-            if "epoch_*" not in gitignore:
-                gitignore.write("epoch_*\n")
     accelerator.wait_for_everyone()
 
     def tokenize_function(examples):
-        return tokenizer([text + tokenizer.eos_token for text in examples["text"]])
+        return tokenizer([text + tokenizer.eos_token for text in examples[text_column]])
 
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
@@ -272,14 +292,10 @@ def main():
 
     accelerator.wait_for_everyone()
     unwrapped_model = accelerator.unwrap_model(model)
-    unwrapped_model.save_pretrained(lora_dir, is_main_process=accelerator.is_main_process,
+    unwrapped_model.save_pretrained(output_dir, is_main_process=accelerator.is_main_process,
                                     save_function=accelerator.save)
     if accelerator.is_main_process:
-        tokenizer.save_pretrained(lora_dir)
-        if repo:
-            repo.push_to_hub(
-                commit_message=f"End of training at epoch {epoch}", blocking=False, auto_lfs_prune=True
-            )
+        tokenizer.save_pretrained(output_dir)
 
 
 if __name__ == "__main__":
