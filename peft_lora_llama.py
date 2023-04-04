@@ -99,7 +99,7 @@ def main():
     model_name_or_path = config["model_and_tokenizer"]["pretrained_model_name"].replace("$HOME", str(Path.home()))
     dataset_names = config["dataset"]["name"]
     text_column = config["dataset"]["key"]
-    lr = config["training"]["learning_rate"]
+    lr = float(config["training"]["learning_rate"])
     num_epochs = config["training"]["epochs"]
     seed = config["training"]["seed"]
     per_device_train_batch_size = config["training"]["train_batch_size"]
