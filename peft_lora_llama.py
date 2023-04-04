@@ -261,38 +261,39 @@ def main():
         train_ppl = torch.exp(train_epoch_loss)
         accelerator.print(f"epoch={epoch}: train_ppl={train_ppl} train_epoch_loss={train_epoch_loss}")
 
-        model.eval()
-        eval_preds = []
-        with TorchTracemalloc() as tracemalloc:
-            for _, batch in enumerate(tqdm(eval_dataloader)):
-                batch = {k: v for k, v in batch.items() if k != "labels"}
-                with torch.no_grad():
-                    outputs = accelerator.unwrap_model(model).generate(
-                        **batch, synced_gpus=is_ds_zero_3, max_new_tokens=10
-                    )  # synced_gpus=True for DS-stage 3
-                outputs = accelerator.pad_across_processes(outputs, dim=1, pad_index=tokenizer.pad_token_id)
-                preds = accelerator.gather(outputs)
-                preds = preds[:, max_length:].detach().cpu().numpy()
-                eval_preds.extend(tokenizer.batch_decode(preds, skip_special_tokens=True))
+        if config["training"]["evaluate"]:
+            model.eval()
+            eval_preds = []
+            with TorchTracemalloc() as tracemalloc:
+                for _, batch in enumerate(tqdm(eval_dataloader)):
+                    batch = {k: v for k, v in batch.items() if k != "labels"}
+                    with torch.no_grad():
+                        outputs = accelerator.unwrap_model(model).generate(
+                            **batch, synced_gpus=is_ds_zero_3, max_new_tokens=10
+                        )  # synced_gpus=True for DS-stage 3
+                    outputs = accelerator.pad_across_processes(outputs, dim=1, pad_index=tokenizer.pad_token_id)
+                    preds = accelerator.gather(outputs)
+                    preds = preds[:, max_length:].detach().cpu().numpy()
+                    eval_preds.extend(tokenizer.batch_decode(preds, skip_special_tokens=True))
 
-        # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
-        accelerator.print("GPU Memory before entering the eval : {}".format(b2mb(tracemalloc.begin)))
-        accelerator.print("GPU Memory consumed at the end of the eval (end-begin): {}".format(tracemalloc.used))
-        accelerator.print("GPU Peak Memory consumed during the eval (max-begin): {}".format(tracemalloc.peaked))
-        accelerator.print(
-            "GPU Total Peak Memory consumed during the eval (max): {}".format(
-                tracemalloc.peaked + b2mb(tracemalloc.begin)
+            # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
+            accelerator.print("GPU Memory before entering the eval : {}".format(b2mb(tracemalloc.begin)))
+            accelerator.print("GPU Memory consumed at the end of the eval (end-begin): {}".format(tracemalloc.used))
+            accelerator.print("GPU Peak Memory consumed during the eval (max-begin): {}".format(tracemalloc.peaked))
+            accelerator.print(
+                "GPU Total Peak Memory consumed during the eval (max): {}".format(
+                    tracemalloc.peaked + b2mb(tracemalloc.begin)
+                )
             )
-        )
 
-        accelerator.print("CPU Memory before entering the eval : {}".format(b2mb(tracemalloc.cpu_begin)))
-        accelerator.print("CPU Memory consumed at the end of the eval (end-begin): {}".format(tracemalloc.cpu_used))
-        accelerator.print("CPU Peak Memory consumed during the eval (max-begin): {}".format(tracemalloc.cpu_peaked))
-        accelerator.print(
-            "CPU Total Peak Memory consumed during the eval (max): {}".format(
-                tracemalloc.cpu_peaked + b2mb(tracemalloc.cpu_begin)
+            accelerator.print("CPU Memory before entering the eval : {}".format(b2mb(tracemalloc.cpu_begin)))
+            accelerator.print("CPU Memory consumed at the end of the eval (end-begin): {}".format(tracemalloc.cpu_used))
+            accelerator.print("CPU Peak Memory consumed during the eval (max-begin): {}".format(tracemalloc.cpu_peaked))
+            accelerator.print(
+                "CPU Total Peak Memory consumed during the eval (max): {}".format(
+                    tracemalloc.cpu_peaked + b2mb(tracemalloc.cpu_begin)
+                )
             )
-        )
 
     accelerator.wait_for_everyone()
     unwrapped_model = accelerator.unwrap_model(model)

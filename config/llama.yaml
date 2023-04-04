@@ -20,6 +20,7 @@
         "resume_from_checkpoint": '$HOME/Work/laion/llama/result/laion-llama-7b',
         # Save interval
         "save_interval": 1000,
+        "evaluate": True,
         # Evaluation interval
         "eval_interval": 1000,
         # Training print interval
