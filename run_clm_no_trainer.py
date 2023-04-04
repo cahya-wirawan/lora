@@ -476,7 +476,7 @@ def main():
         )
 
     train_dataset = lm_datasets["train"]
-    eval_dataset = lm_datasets["validation"]
+    eval_dataset = lm_datasets["test"]
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):

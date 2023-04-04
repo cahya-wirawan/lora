@@ -21,6 +21,7 @@ from transformers import (
 from huggingface_hub import Repository, create_repo
 
 from peft import LoraConfig, TaskType, get_peft_model
+import deepspeed
 
 # Converting Bytes to Megabytes
 def b2mb(x):
@@ -77,22 +78,22 @@ class TorchTracemalloc:
 
 def main():
     accelerator = Accelerator()
-    model_name_or_path = "bigscience/bloomz-7b1-mt"
-    dataset_name = "cahya/instructions-all"
-    repo_name = "cahya/bloomz-7b1-mt"
+    model_name_or_path = "/fsx/cahya/Work/models/llama-7b-hf"
+    dataset_name = "cahya/instructions-id"
+    repo_name = "cahya/llama-7b-lora-id"
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
     text_column = "text"
-    lr = 5e-6
+    lr = 5e-5
     num_epochs = 1
     seed = 42
     max_length = 64
     set_seed(seed)
     preprocessing_num_workers=4
     overwrite_cache = False
-    per_device_train_batch_size = 2
-    per_device_eval_batch_size = 2
+    per_device_train_batch_size = 1
+    per_device_eval_batch_size = 1
     checkpoint_dir = "checkpoint"
-    lora_dir = "lora_model"
+    lora_dir = repo_name
 
     logger = get_logger(__name__)
     dataset = load_dataset(dataset_name)
@@ -156,7 +157,7 @@ def main():
         )
 
     train_dataset = lm_datasets["train"]
-    eval_dataset = lm_datasets["test"]
+    eval_dataset = lm_datasets["validation"]
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -177,6 +178,7 @@ def main():
 
     # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    #optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model.parameters(), lr=lr)
 
     # lr scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
