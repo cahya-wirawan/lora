@@ -19,12 +19,14 @@ from transformers import (
     get_linear_schedule_with_warmup,
     set_seed,
 )
-from huggingface_hub import Repository, create_repo
+# from huggingface_hub import Repository, create_repo
 
 from peft import LoraConfig, TaskType, get_peft_model
-import deepspeed
+# import deepspeed
 
 # Converting Bytes to Megabytes
+
+
 def b2mb(x):
     return int(x / 2**20)
 
@@ -89,7 +91,7 @@ def main():
     seed = 42
     max_length = 64
     set_seed(seed)
-    preprocessing_num_workers=4
+    preprocessing_num_workers = 4
     overwrite_cache = False
     per_device_train_batch_size = 1
     per_device_eval_batch_size = 1
@@ -116,6 +118,7 @@ def main():
             if "epoch_*" not in gitignore:
                 gitignore.write("epoch_*\n")
     accelerator.wait_for_everyone()
+
     def tokenize_function(examples):
         return tokenizer([text + tokenizer.eos_token for text in examples["text"]])
 
@@ -130,7 +133,7 @@ def main():
             total_length = (total_length // block_size) * block_size
         # Split by chunks of max_len.
         result = {
-            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+            k: [t[i: i + block_size] for i in range(0, total_length, block_size)]
             for k, t in concatenated_examples.items()
         }
         result["labels"] = result["input_ids"].copy()
@@ -179,7 +182,7 @@ def main():
 
     # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-    #optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model.parameters(), lr=lr)
+    # optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model.parameters(), lr=lr)
 
     # lr scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
@@ -232,7 +235,7 @@ def main():
         )
         train_epoch_loss = total_loss / len(eval_dataloader)
         train_ppl = torch.exp(train_epoch_loss)
-        accelerator.print(f"{epoch=}: {train_ppl=} {train_epoch_loss=}")
+        accelerator.print(f"epoch={epoch}: train_ppl={train_ppl} train_epoch_loss={train_epoch_loss}")
 
         model.eval()
         eval_preds = []
@@ -269,8 +272,8 @@ def main():
 
     accelerator.wait_for_everyone()
     unwrapped_model = accelerator.unwrap_model(model)
-    unwrapped_model.save_pretrained(lora_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
-    )
+    unwrapped_model.save_pretrained(lora_dir, is_main_process=accelerator.is_main_process,
+                                    save_function=accelerator.save)
     if accelerator.is_main_process:
         tokenizer.save_pretrained(lora_dir)
         if repo:
