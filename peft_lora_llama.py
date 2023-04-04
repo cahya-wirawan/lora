@@ -3,6 +3,7 @@ import threading
 import random
 from itertools import chain
 import os
+from pathlib import Path
 
 import psutil
 import torch
@@ -78,7 +79,7 @@ class TorchTracemalloc:
 
 def main():
     accelerator = Accelerator()
-    model_name_or_path = "/fsx/cahya/Work/models/llama-7b-hf"
+    model_name_or_path = Path.home()/"Work/models/llama-7b-hf"
     dataset_name = "cahya/instructions-id"
     repo_name = "cahya/llama-7b-lora-id"
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
