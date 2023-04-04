@@ -96,7 +96,7 @@ def main():
         logger.info(json.dumps(config, indent=2))
         set_seed(config["training"]["seed"])
     accelerator = Accelerator()
-    model_name_or_path = config["model_and_tokenizer"]["pretrained_model_name"].replace("$HOME", Path.home())
+    model_name_or_path = config["model_and_tokenizer"]["pretrained_model_name"].replace("$HOME", str(Path.home()))
     dataset_names = config["dataset"]["name"]
     text_column = config["dataset"]["key"]
     lr = config["training"]["learning_rate"]
