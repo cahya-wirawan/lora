@@ -132,8 +132,8 @@ def main():
 
     if config["test"]:
         dataset["train"] = dataset["train"].select(range(500))
-        dataset["validation"] = dataset["validation"].select(range(100))
-        dataset["test"] = dataset["test"].select(range(100))
+        dataset["validation"] = dataset["validation"].select(range(200))
+        dataset["test"] = dataset["test"].select(range(200))
 
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 

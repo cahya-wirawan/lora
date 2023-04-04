@@ -15,9 +15,9 @@
         # Random seed value.
         "seed": 42,
         # Model save path
-        "save_root_path": "$HOME/Work/laion/llama/result",
+        "save_root_path": "$HOME/Work/llama/result",
         # resume checkpoint path
-        "resume_from_checkpoint": '$HOME/Work/laion/llama/result/laion-llama-7b',
+        "resume_from_checkpoint": '$HOME/Work/llama/result/laion-llama-7b',
         # Save interval
         "save_interval": 1000,
         "evaluate": True,
