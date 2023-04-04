@@ -1,5 +1,6 @@
 {
     "debug": False,
+    "test": False,
     "training": {
         # project name
         "project": "laion-llama-7b",

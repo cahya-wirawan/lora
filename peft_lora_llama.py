@@ -114,7 +114,7 @@ def main():
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
 
     if True:
-        raw_datasets = None
+        dataset = None
         dataset_names = dataset_names.split(",")
         for i, dataset_name in enumerate(dataset_names):
             dataset_name = dataset_name.strip()
@@ -122,15 +122,19 @@ def main():
             ds = ds.select_columns([text_column])
             print(f"{dataset_name}: {len(ds['train'])}, {len(ds['validation'])}, {len(ds['test'])}")
             if i == 0:
-                raw_datasets = ds
+                dataset = ds
             else:
                 for split in ["train", "validation", "test"]:
-                    raw_datasets[split] = concatenate_datasets([raw_datasets[split], ds[split]])
+                    dataset[split] = concatenate_datasets([dataset[split], ds[split]])
         print(
-            f"Dataset all: {len(raw_datasets['train'])}, {len(raw_datasets['validation'])}, {len(raw_datasets['test'])}")
-        raw_datasets = raw_datasets.shuffle(seed=42)
+            f"Dataset all: {len(dataset['train'])}, {len(dataset['validation'])}, {len(dataset['test'])}")
+        dataset = dataset.shuffle(seed=42)
 
-    dataset = raw_datasets
+    if config["test"]:
+        dataset["train"] = dataset["train"].select(range(500))
+        dataset["validation"] = dataset["validation"].select(range(100))
+        dataset["test"] = dataset["test"].select(range(100))
+
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
     block_size = tokenizer.model_max_length
