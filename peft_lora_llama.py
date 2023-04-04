@@ -107,8 +107,8 @@ def main():
     # Handle the repository creation
     repo = None
     if accelerator.is_main_process:
-        create_repo(repo_name)
-        repo = Repository(lora_dir, clone_from=repo_name)
+        # create_repo(repo_name)
+        # repo = Repository(lora_dir, clone_from=repo_name)
 
         with open(os.path.join(lora_dir, ".gitignore"), "w+") as gitignore:
             if "step_*" not in gitignore:
